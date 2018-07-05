@@ -1,0 +1,89 @@
+---
+title: "Predictive Model for Classification of Exercise Data"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+This is an R Markdown document for the final project of the practical machin learning course. It elaborates how random forest algorthm is used for prediction in a classification problem.
+
+## Goal
+The goal of this project is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants and predict if they perform the excercise correctly or incorrectly.
+
+## Data:
+The training data for this project are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+The test data are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har.
+
+Import libraries:
+```{r, results='hide'}
+library(randomForest)
+library(caret) #for confusionMatrix
+```
+
+Read downloaded files:
+```{r}
+Train = read.csv("pml-training.csv")
+Test = read.csv("pml-testing.csv")
+```
+Length of training and test data:
+```{r}
+nrow(Train)
+nrow (Test)
+```
+After exploring the data, it is found that there are several columns that include many NA data.
+find columns with NA values and remove them. Also remove the first 7 columns which won't be used in the prediction.
+column names that include words Kurtosis, skewness, max, min, amplitude whcih are a function of other columns are also removed.
+```{r}
+TrainM <- Train[,-c(1:7,which(colSums(is.na(Train))>1))]
+TestM <- Test[,-c(1:7,which(colSums(is.na(Test))>1))]
+
+TrainM <- TrainM[,-which(grepl("kurtosis|skewness|max|min|amplitude",
+                               colnames(TrainM)))]
+```
+
+Subsample 1000 data points from the trainM data to find some of the model parameters (to save time).
+```{r}
+Training <- TrainM[sample(nrow(TrainM),1000),]
+```
+
+First perform cross validation with 5 folds to find optimal number of variables (mtry):
+```{r}
+rf.cvfit <- rfcv(Training[,-ncol(Training)], Training[,"classe"], cv.fold = 5)
+rf.cvfit$error.cv
+```
+Use 13 variables (mtry=13):
+
+Perform a general random forest on the suset data and plot error as a function of number of trees to figure out how many trees to use:
+```{r}
+fit1 <- randomForest(classe ~ ., data = Training, importance= T, mtry = 13)
+plot(fit1)
+```
+
+
+Use 80 trees in the random forest model. Fit the model to 80% of training data and test it on the remainder 20% data:
+```{r}
+Training80_ind =sample(nrow(TrainM),round(.8*nrow(TrainM),0))
+training80 <-TrainM[Training80_ind,]
+testing80 <- TrainM[-Training80_ind,]
+RFfit <- randomForest(x = training80[,-ncol(training80)],y = training80[,ncol(training80)], importance= T, mtry = 13, ntree =80)
+```
+
+
+Predict on the left-out 20% of the data
+```{r}
+prediction <-predict(RFfit, newdata = testing80)
+confusionMatrix(prediction, testing80$classe)
+```
+
+Prediction on the actual test set for the quiz (100% accuracy):
+```{r}
+FinalPrediction <-predict(RFfit, newdata = TestM)
+FinalPrediction
+```
